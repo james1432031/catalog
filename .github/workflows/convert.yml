@@ -1,0 +1,52 @@
+name: Convert CSV to JS
+
+on:
+  push:
+    paths:
+      - 'products.csv'
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run conversion script
+        run: |
+          python -c '
+          import csv, json
+          products = []
+          with open("products.csv", mode="r", encoding="utf-8") as f:
+              reader = csv.DictReader(f)
+              for row in reader:
+                  cleaned_row = {}
+                  for key, value in row.items():
+                      if value is None or value.strip() == "":
+                          cleaned_row[key] = None
+                      else:
+                          val_str = value.strip()
+                          if key in ["purchase_price", "recommended_selling_price", "weight", "length", "width", "height"]:
+                              try:
+                                  val_clean = val_str.replace(",", ".")
+                                  cleaned_row[key] = float(val_clean) if "." in val_clean else int(val_clean)
+                              except ValueError:
+                                  cleaned_row[key] = val_str if val_str != "" else None
+                          else:
+                              cleaned_row[key] = val_str
+                  products.append(cleaned_row)
+          
+          with open("products.js", mode="w", encoding="utf-8") as f:
+              f.write(f"window.allProducts = {json.dumps(products, ensure_ascii=False, indent=2)};")
+          '
+
+      - name: Commit and push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update products.js from products.csv"
+          file_pattern: "products.js"
